@@ -1,0 +1,523 @@
+---
+title: "NCAA Men's Basketball - 2019"
+author: "Sam Freis"
+date: "2023-02-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list=ls())
+cat("\014") 
+
+library(tidyverse)
+library(readxl)
+library(psych)
+library(car)
+library(forcats)
+library(lme4)
+library(gridExtra)
+library(knitr)
+library(aod)
+library(ggplot2)
+library(performance)
+
+# install.packages("devtools", repos="https://cran.stat.unipd.it/")
+# devtools::install_github("sndmrc/BasketballAnalyzeR",force=TRUE)
+library(BasketballAnalyzeR)
+RNGkind(sample.kind = "Rounding")
+```
+
+## Basketball Data Science 
+#### Working through and adpating code from P. Zuccolotto and M. Manisera (2020) Basketball Data Science – With Applications in R, Chapman and Hall/CRC. ISBN 9781138600799.
+
+### Using BasketballAnalyzeR with NCAA Basketball Data ### 
+#### Data Import ####
+```{r}
+# data and some code pulled from BasketballAnalyzeR package: https://bodai.unibs.it/bdsports/basketballanalyzer/
+
+#data(package="BasketballAnalyzeR")
+
+# NCAA data pulled from: https://www.kaggle.com/datasets/andrewsundberg/college-basketball-dataset
+# using 2019 season for completeness 
+cbb <- read.csv("~/Dropbox/AltAc/Freelancing/BasketballDataScience/MBB19/rawdat/cbb/cbb19.csv")
+```
+This report is my own analysis using a combination of BasketballAnalyzeR and other packages to analyze performance in the 2019 NCAA MBB season and tournament. 
+
+In Basketball Data Science, chapter 6 reviews aggregating game box scores at the team, opponent, and player level using the tidyverse. This 2019 CBB data is already aggregated within season at the team level, so I'll be focusing on team-level analyses and visualizations. 
+
+## 2019 NCAA Men's Basketball ## 
+
+#### CBB Variables 
+
+* TEAM: The Division I college basketball school
+
+* CONF: The Athletic Conference in which the school participates in (A10 = Atlantic 10, ACC = Atlantic Coast Conference, AE = America East, Amer = American, ASun = ASUN, B10 = Big Ten, B12 = Big 12, BE = Big East, BSky = Big Sky, BSth = Big South, BW = Big West, CAA = Colonial Athletic Association, CUSA = Conference USA, Horz = Horizon League, Ivy = Ivy League, MAAC = Metro Atlantic Athletic Conference, MAC = Mid-American Conference, MEAC = Mid-Eastern Athletic Conference, MVC = Missouri Valley Conference, MWC = Mountain West, NEC = Northeast Conference, OVC = Ohio Valley Conference, P12 = Pac-12, Pat = Patriot League, SB = Sun Belt, SC = Southern Conference, SEC = South Eastern Conference, Slnd = Southland Conference, Sum = Summit League, SWAC = Southwestern Athletic Conference, WAC = Western Athletic Conference, WCC = West Coast Conference)
+
+* G: Number of games played
+
+* W: Number of games won
+
+* ADJOE: Adjusted Offensive Efficiency (An estimate of the offensive efficiency (points scored per 100 possessions) a team would have against the average Division I defense)
+
+* ADJDE: Adjusted Defensive Efficiency (An estimate of the defensive efficiency (points allowed per 100 possessions) a team would have against the average Division I offense)
+
+* BARTHAG: Power Rating (Chance of beating an average Division I team)
+
+* EFG_O: Effective Field Goal Percentage Shot
+
+* EFG_D: Effective Field Goal Percentage Allowed
+
+* TOR: Turnover Percentage Allowed (Turnover Rate)
+
+* TORD: Turnover Percentage Committed (Steal Rate)
+
+* ORB: Offensive Rebound Rate
+
+* DRB: Offensive Rebound Rate Allowed
+
+* FTR : Free Throw Rate (How often the given team shoots Free Throws)
+
+* FTRD: Free Throw Rate Allowed
+
+* 2P_O: Two-Point Shooting Percentage
+
+* 2P_D: Two-Point Shooting Percentage Allowed
+
+* 3P_O: Three-Point Shooting Percentage
+
+* 3P_D: Three-Point Shooting Percentage Allowed
+
+* ADJ_T: Adjusted Tempo (An estimate of the tempo (possessions per 40 minutes) a team would have against the team that wants to play at an average Division I tempo)
+
+* WAB: Wins Above Bubble (The bubble refers to the cut off between making the NCAA March Madness Tournament and not making it)
+
+* POSTSEASON: Round where the given team was eliminated or where their season ended (R68 = First Four, R64 = Round of 64, R32 = Round of 32, S16 = Sweet Sixteen, E8 = Elite Eight, F4 = Final Four, 2ND = Runner-up, Champion = Winner of the NCAA March Madness Tournament for that given year)
+
+* SEED: Seed in the NCAA March Madness Tournament
+
+###### Creating additional variables for analyses 
+```{r, warning=FALSE}
+cbb<-mutate(cbb, Qual = ifelse(SEED <= 16, "Yes", "No"))
+cbb$Qual<-cbb$Qual %>% replace_na("No")
+
+kable(table(cbb$Qual))
+
+tourney<-subset(cbb, Qual=="Yes")
+```
+
+#### Basic Descriptives ####
+```{r}
+# subset to numeric vars and describe
+numVARS<-c("G",
+          "W",
+          "ADJOE",
+          "ADJDE",
+          "BARTHAG",
+          "EFG_O",
+          "EFG_D",
+          "TOR",
+          "TORD",
+          "ORB",
+          "DRB",
+          "FTR",
+          "FTRD",
+          "X2P_O",
+          "X2P_D",
+          "X3P_O",
+          "X3P_D",
+          "ADJ_T",
+          "WAB"
+)
+numITEMS<-cbb[numVARS]
+
+kable(describe(numITEMS), 
+      format='markdown', 
+      digits=2)
+
+tnumITEMS<-tourney[numVARS]
+
+kable(describe(tnumITEMS), 
+      format='markdown', 
+      digits=2)
+```
+
+Descriptives for the entire MBB season and for the subset of teams that qualified for the tournament. 
+
+## Research Questions: 
+### 1. What was the spread of wins in the 2019 season? 
+```{r, warning=FALSE}
+ggplot(cbb, aes(x=W))+
+  geom_histogram(color="#FFFFFF", fill="#003C80")+
+  scale_x_continuous(breaks = seq(0, 40, by = 10))+
+  scale_y_continuous(breaks = seq(0, 90, len = 10))+
+  labs(title="2019 MBB Wins",x="Frequency", y = "Count")+
+  theme_minimal()
+```
+
+### 2a. What was the spread of wins in the 2019 season by conference? 
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=13}
+kable(table(cbb$CONF))
+
+p<-ggplot(cbb, aes(x=CONF, y=W, fill=CONF)) + 
+    geom_boxplot()+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+```
+
+### 2b. What was the spread of wins in the 2019 season by conference grpuped by tournament qualification? 
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=22, fig.height=10}
+p<-ggplot(cbb, aes(x=CONF, y=W, fill=CONF)) + 
+    geom_boxplot()+
+      facet_wrap(~Qual)+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+
+```
+
+### 3. What conference appeared the most in the 2019 tournament?
+```{r}
+ggplot(tourney, aes(x = fct_infreq(CONF)))+
+  geom_bar(color="#FFFFFF", fill="#CCA600")+
+  labs(title="2019 Tournament by Conference",x="Conference", y = "Count")+
+  theme_minimal()+
+  theme(legend.position = "bottom", axis.text.x = element_text(angle=60, size=7, hjust = 1))
+```
+
+Power 5 conferences were well represented, but smaller conferences, like the American and Big East conferences also performed well this year. 
+
+### 4a. What are the relationships between different stats and wins?
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=24, fig.height=12}
+numVARS<-c("W",
+          "ADJOE",
+          "ADJDE",
+          "BARTHAG",
+          "EFG_O",
+          "EFG_D",
+          "TOR",
+          "TORD",
+          "ORB",
+          "DRB",
+          "FTR",
+          "FTRD",
+          "X2P_O",
+          "X2P_D",
+          "X3P_O",
+          "X3P_D",
+          "ADJ_T")
+numITEMS<-cbb[numVARS]
+
+scatterplot(numITEMS, data.var =1:17,  diag = list(continuous="blankDiag"))
+```
+
+### 4b. What are the relationships between different stats and wins split by tournament qualification?
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=24, fig.height=16}
+numtVARS<-c("W",
+          "ADJOE",
+          "ADJDE",
+          "BARTHAG",
+          "EFG_O",
+          "EFG_D",
+          "TOR",
+          "TORD",
+          "ORB",
+          "DRB",
+          "FTR",
+          "FTRD",
+          "X2P_O",
+          "X2P_D",
+          "X3P_O",
+          "X3P_D",
+          "ADJ_T",
+          "Qual"
+)
+numtITEMS<-cbb[numtVARS]
+
+scatterplot(numtITEMS, data.var =1:17, z.var="Qual", diag = list(continuous="blankDiag"))
+```
+
+Adjusted Offensive Efficiency (ADJOE) and Adjusted Defensive Efficiency (ADJDE) were both strongly correlated with total wins. These variables both index points scored and points allowed.  
+
+### 4c. What are the mean differences in Adjusted Offensive Efficiency (ADJOE) and Adjusted Defensive Efficiency (ADJDE) for qualifiying vs. non-qualifying teams? 
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=9}
+p<-ggplot(cbb, aes(x=Qual, y=ADJOE, fill=Qual)) + 
+    geom_boxplot()+
+    labs(title="ADJOE by Qualifying Status")+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+
+t.test(ADJOE ~ Qual, data = cbb)
+```
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=9}
+p<-ggplot(cbb, aes(x=Qual, y=ADJDE, fill=Qual)) + 
+    geom_boxplot()+
+    labs(title="ADJDE by Qualifying Status")+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+
+t.test(ADJDE ~ Qual, data = cbb)
+```
+
+There were fairly substantial differences in average offensive and defensive efficiency between teams that did and did not qualify for the tournament.   
+
+### 4d. Predicting qualification   
+
+```{r, message=FALSE, warning=FALSE}
+cbb$QualFac <- ifelse(cbb$Qual == "Yes",
+c(1), c(0))
+
+quallogit <- glm(QualFac ~ ADJOE + ADJDE + TOR + TORD + ORB + DRB + ADJ_T, data = cbb, family = "binomial")
+
+summary(quallogit)
+confint(quallogit)
+
+wald.test(b = coef(quallogit), Sigma = vcov(quallogit), Terms = 4:8)
+
+exp(coef(quallogit))
+exp(cbind(OR = coef(quallogit), confint(quallogit)))
+```
+
+* While accounting for the other variables in the model, with every one unit change in ADJOE, the log odds of qualifying for the tournament increases by 0.257. 
+* While accounting for the other variables in the model, with every one unit change in ADJDE, the log odds of qualifying for the tournament decreases by -0.142.
+* For the wald test of the overall effect of the other variables in the model, the chi-squared test statistic of 6.9, with three degrees of freedom is associated with a p-value of 0.23 indicates that the overall effect of the other variables in the model is not statistically significant.
+
+### 5. Digging into Post Season Data
+
+* Some post season notes
+ + Virginia won this year 
+ + Texas Tech were the runners-up
+ + Teams eliminated in the Final 4 consisted of: Michigan St., and Auburn
+ + Teams eliminated in the Elite 8 consisted of: Gonzaga, Duke, Kentucky, and Purdue 
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=9}
+labs <- c("Free Throw Rate","Two-Point Shooting Percentage","Three-Point Shooting Percentage")
+barline(data=tourney, id="TEAM", bars=c("FTR","X2P_O","X3P_O"),
+		line="W", order.by="SEED", labels.bars=labs)
+```
+
+This Bar-line plot displays some offensive stats for qualifying teams in the 2019 NCAAMB Tournament. The bars are ordered by seed, and the line plots the total number of wins. 
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=12}
+require("ggrepel")
+
+p <- ggplot(tourney, aes(x=ADJ_T, y=SEED)) +
+  geom_point(color = 'red') +
+  theme_classic(base_size = 10)
+
+p + geom_label_repel(aes(label = tourney$TEAM,
+                    fill = factor(CONF)), color = 'white',
+                    size = 3.5) +
+   theme(legend.position = "bottom")
+
+p <- ggplot(tourney, aes(x=ADJOE, y=SEED)) +
+  geom_point(color = 'red') +
+  theme_classic(base_size = 10)
+
+p + geom_label_repel(aes(label = tourney$TEAM,
+                    fill = factor(CONF)), color = 'white',
+                    size = 3.5) +
+   theme(legend.position = "bottom")
+
+p <- ggplot(tourney, aes(x=ADJDE, y=SEED)) +
+  geom_point(color = 'red') +
+  theme_classic(base_size = 10)
+
+p + geom_label_repel(aes(label = tourney$TEAM,
+                    fill = factor(CONF)), color = 'white',
+                    size = 3.5) +
+   theme(legend.position = "bottom")
+```
+
+Plotting relationships between Adjusted Tempo (An estimate of the tempo (possessions per 40 minutes) a team would have against the team that wants to play at an average Division I tempo), ADJOE: Adjusted Offensive Efficiency (An estimate of the offensive efficiency (points scored per 100 possessions) a team would have against the average Division I defense), ADJDE: Adjusted Defensive Efficiency (An estimate of the defensive efficiency (points allowed per 100 possessions) a team would have against the average Division I offense), and  tournament seed. 
+
+There is not much of a relationship between tempo and seed. However, there appear to be very strong relationships between offensive efficiency, defensive efficiency, and seed where more points scored corresponds to a lower seed and more points allowed corresponds to a higher seed.  
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=12}
+require("ggrepel")
+
+p <- ggplot(tourney, aes(x=ADJ_T, y=W)) +
+  geom_point(color = 'red') +
+  theme_classic(base_size = 10)
+
+p + geom_label_repel(aes(label = tourney$TEAM,
+                    fill = factor(CONF)), color = 'white',
+                    size = 3.5) +
+   theme(legend.position = "bottom")
+
+p <- ggplot(tourney, aes(x=ADJOE, y=W)) +
+  geom_point(color = 'red') +
+  theme_classic(base_size = 10)
+
+p + geom_label_repel(aes(label = tourney$TEAM,
+                    fill = factor(CONF)), color = 'white',
+                    size = 3.5) +
+   theme(legend.position = "bottom")
+
+p <- ggplot(tourney, aes(x=ADJDE, y=W)) +
+  geom_point(color = 'red') +
+  theme_classic(base_size = 10)
+
+p + geom_label_repel(aes(label = tourney$TEAM,
+                    fill = factor(CONF)), color = 'white',
+                    size = 3.5) +
+   theme(legend.position = "bottom")
+```
+
+Plotting relationships between Adjusted Tempo (An estimate of the tempo (possessions per 40 minutes) a team would have against the team that wants to play at an average Division I tempo), ADJOE: Adjusted Offensive Efficiency (An estimate of the offensive efficiency (points scored per 100 possessions) a team would have against the average Division I defense), ADJDE: Adjusted Defensive Efficiency (An estimate of the defensive efficiency (points allowed per 100 possessions) a team would have against the average Division I offense), and total season wins. 
+
+There is not much of a relationship between tempo and wins. However, consistent with seed and the scatterplots above, there appears to be very strong relationships between offensive efficiency, defensive efficiency, and wins where more points scored corresponds to more wins (and therefore going farther in the tourney) and more points allowed corresponds to fewer wins. 
+
+Quick sanity check: Season wins should increase with tournament position (with the caveat that some teams play different amounts of games because of preseason tournaments, games cancelled, etc.)
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=13}
+tourney$POSTSEASON<-factor(tourney$POSTSEASON, levels = c("R68", "R64", "R32", "S16", "E8", "F4", "2ND", "Champions"))
+
+p<-ggplot(tourney, aes(x=POSTSEASON, y=W, fill=POSTSEASON)) + 
+    geom_boxplot()+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+```
+
+
+Consistent with the scatterplots above, there appears to be strong relationships between offensive efficiency and going farther in the tourney 
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=13}
+p<-ggplot(tourney, aes(x=POSTSEASON, y=ADJOE, fill=POSTSEASON)) + 
+    geom_boxplot()+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+```
+
+Consistent with the scatterplots above, there appears to be strong relationships between defensive efficiency and going farther in the tourney. However, the runners-up, Texas Tech, had a better overall defensive efficiency index throughout the course of the season than the champions, UVA.   
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=13}
+p<-ggplot(tourney, aes(x=POSTSEASON, y=ADJDE, fill=POSTSEASON)) + 
+    geom_boxplot()+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+```
+
+Though it did not relate to total season wins, UVA had a very quick tempo throughout the season. 
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=13}
+p<-ggplot(tourney, aes(x=POSTSEASON, y=ADJ_T, fill=POSTSEASON)) + 
+    geom_boxplot()+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+```
+
+Here, I examined differences in rebounds and turnovers by post season position. These variables did not relate as strongly to total wins as the points scored and allowed variables, however these stats can be very important to a game's outcome.  
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=13}
+p<-ggplot(tourney, aes(x=POSTSEASON, y=ORB, fill=POSTSEASON)) + 
+    geom_boxplot()+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+```
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=13}
+p<-ggplot(tourney, aes(x=POSTSEASON, y=DRB, fill=POSTSEASON)) + 
+    geom_boxplot()+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+```
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=13}
+p<-ggplot(tourney, aes(x=POSTSEASON, y=TOR, fill=POSTSEASON)) + 
+    geom_boxplot()+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+```
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=13}
+p<-ggplot(tourney, aes(x=POSTSEASON, y=TORD, fill=POSTSEASON)) + 
+    geom_boxplot()+
+  theme_bw()
+
+p+theme(legend.position = "bottom")
+```
+
+Above, I examined correlations between various statistics in all teams in the 2019 season and correlations split by tournament qualification. Let's examine the relationships between different stats just in the tournament teams using a corrplot form BasketballAnalyzeR. 
+
+Interestingly, these stats range from weakly to moderatley related to wins. The different effective field goal percentage shot and allowed variables are highly related to the 2-point and 3-point percentages made and allowed, suggesting using both in a model could lead to high collinearity. These high correlations makes sense, as the effective field goal rate variables are likely calculated with those 2-point and 3-point percentages made and allowed variables.      
+
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=20}
+tourney$BARTHAG<-NULL
+corrmatrix<-corranalysis(tourney[,4:19], threshold = .5)
+plot(corrmatrix)
+```
+
+#### Post Season Analysis
+
+```{r, message=FALSE, warning=FALSE}
+tourney$TFac<-ordered(tourney$POSTSEASON, levels = c("R68", "R64", "R32", "S16", "E8", "F4", "2ND", "Champions"))
+tourney$TFac<-as.numeric(tourney$TFac)
+
+m1<- lm(TFac ~ ADJOE + ADJDE + TOR + TORD + ORB + DRB + ADJ_T, data=tourney)
+summary(m1)
+
+#check_model(m1)
+#model_performance(m1)
+```
+
+Offensive efficiency, defensive efficiency, and tempo were statistically significantly predictors of tournament placement. Better offensive efficiency, worse defensive efficiency, and quicker tempo corresponded to remaining in the tournament longer. 
+
+```{r, message=FALSE, warning=FALSE}
+m2<- lm(W ~ ADJOE + ADJDE + TOR + TORD + ORB + DRB + ADJ_T, data=cbb)
+summary(m2)
+
+m3<- lm(W ~ ADJOE + ADJDE + TOR + TORD + ORB + DRB + ADJ_T, data=tourney)
+summary(m3)
+```
+In the full season sample, Offensive Efficiency, Defensive Efficiency, Turnover Rate, Steal Rate, Offensive Rebound Rate, and Offensive Rebound Rate Allowed were all statistically significantly predictors of total wins. 
+
+In the subsample of teams that qualified for the tournament, Offensive Efficiency, Turnover Rate, Steal Rate, Offensive Rebound Rate, and Offensive Rebound Rate Allowed were all statistically significantly predictors of total wins. 
+
+```{r, message=FALSE, warning=FALSE, fig.width=12}
+clusVARS<-c(
+          "EFG_O",
+          "EFG_D",
+          "TOR",
+          "TORD",
+          "ORB",
+          "DRB",
+          "FTR",
+          "FTRD",
+          "X2P_O",
+          "X2P_D",
+          "X3P_O",
+          "X3P_D",
+          "ADJ_T"
+)
+clusITEMS<-tourney[clusVARS]
+
+set.seed(13)
+kclu1<-kclustering(clusITEMS)
+plot(kclu1)
+
+kclu2<-kclustering(clusITEMS, labels = tourney$TEAM, k=5)
+plot(kclu2)
+
+cluster <- as.factor(kclu2$Subjects$Cluster)
+Xbubble <- data.frame(Team=tourney$TEAM, PTS=tourney$ADJOE,
+					  PTS.Opp=tourney$ADJDE, cluster,
+					  W=tourney$W)
+labs <- c("PTS", "PTS.Opp", "cluster", "Wins")
+bubbleplot(Xbubble, id="Team", x="PTS", y="PTS.Opp",
+		   col="cluster", size="W", labels=labs)
+```
+Bubble plot of the teams that participated in the 2019 tournament for offensive efficiency (PTS), defensive efficiency (PTS.Opp), number of wins, and cluster.   
