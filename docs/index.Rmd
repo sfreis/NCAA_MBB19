@@ -339,8 +339,9 @@ Plotting relationships between Adjusted Tempo (An estimate of the tempo (possess
 
 There is not much of a relationship between tempo and seed. However, there appear to be very strong relationships between offensive efficiency, defensive efficiency, and seed where more points scored corresponds to a lower seed and more points allowed corresponds to a higher seed.  
 
-```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=12}
+```{r, fig.align='center', message=FALSE, warning=FALSE, fig.width=16}
 require("ggrepel")
+tourney$TFac<-ordered(tourney$POSTSEASON, levels = c("R68", "R64", "R32", "S16", "E8", "F4", "2ND", "Champions"))
 
 p <- ggplot(tourney, aes(x=ADJ_T, y=W)) +
   geom_point(color = 'red') +
@@ -368,6 +369,38 @@ p + geom_label_repel(aes(label = tourney$TEAM,
                     fill = factor(CONF)), color = 'white',
                     size = 3.5) +
    theme(legend.position = "bottom")
+
+ggplot(tourney, aes(x=ADJ_T, y=W)) +
+  geom_point(color = 'red') +
+  theme_classic(base_size = 10)+ 
+  geom_label_repel(aes(label = tourney$TEAM,
+                         fill = factor(TFac)), color = 'white',
+                     size = 3.5) +
+  labs(x = "Tempo", y = "Wins")+
+  theme(legend.position = "bottom")+
+  guides(fill=guide_legend(title="Post Season Finish"))
+
+ggplot(tourney, aes(x=ADJOE, y=W)) +
+  geom_point(color = 'red') +
+  theme_classic(base_size = 10)+ 
+  geom_label_repel(aes(label = tourney$TEAM,
+                         fill = factor(TFac)), color = 'white',
+                     size = 3.5) +
+  labs(x = "Offensive Efficiency", y = "Wins")+
+  theme(legend.position = "bottom")+
+  guides(fill=guide_legend(title="Post Season Finish"))
+
+ggplot(tourney, aes(x=ADJDE, y=W)) +
+  geom_point(color = 'red') +
+  theme_classic(base_size = 10)+ 
+  geom_label_repel(aes(label = tourney$TEAM,
+                         fill = factor(TFac)), color = 'white',
+                     size = 3.5) +
+  labs(x = "Defensive Efficiency", y = "Wins")+
+  theme(legend.position = "bottom")+
+  guides(fill=guide_legend(title="Post Season Finish"))
+
+
 ```
 
 Plotting relationships between Adjusted Tempo (An estimate of the tempo (possessions per 40 minutes) a team would have against the team that wants to play at an average Division I tempo), ADJOE: Adjusted Offensive Efficiency (An estimate of the offensive efficiency (points scored per 100 possessions) a team would have against the average Division I defense), ADJDE: Adjusted Defensive Efficiency (An estimate of the defensive efficiency (points allowed per 100 possessions) a team would have against the average Division I offense), and total season wins. 
@@ -487,7 +520,7 @@ In the full season sample, Offensive Efficiency, Defensive Efficiency, Turnover 
 
 In the subsample of teams that qualified for the tournament, Offensive Efficiency, Turnover Rate, Steal Rate, Offensive Rebound Rate, and Offensive Rebound Rate Allowed were all statistically significantly predictors of total wins. 
 
-```{r, message=FALSE, warning=FALSE, fig.width=12}
+```{r, message=FALSE, warning=FALSE, fig.width=16}
 clusVARS<-c(
           "EFG_O",
           "EFG_D",
