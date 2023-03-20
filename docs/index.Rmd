@@ -22,6 +22,7 @@ library(knitr)
 library(aod)
 library(ggplot2)
 library(performance)
+library(sjPlot)
 
 # install.packages("devtools", repos="https://cran.stat.unipd.it/")
 # devtools::install_github("sndmrc/BasketballAnalyzeR",force=TRUE)
@@ -277,6 +278,8 @@ quallogit <- glm(QualFac ~ ADJOE + ADJDE + TOR + TORD + ORB + DRB + ADJ_T, data 
 
 summary(quallogit)
 confint(quallogit)
+tab_model(quallogit)
+
 
 wald.test(b = coef(quallogit), Sigma = vcov(quallogit), Terms = 4:8)
 
@@ -503,6 +506,8 @@ tourney$TFac<-as.numeric(tourney$TFac)
 m1<- lm(TFac ~ ADJOE + ADJDE + TOR + TORD + ORB + DRB + ADJ_T, data=tourney)
 summary(m1)
 
+tab_model(m1)
+
 #check_model(m1)
 #model_performance(m1)
 ```
@@ -512,9 +517,12 @@ Offensive efficiency, defensive efficiency, and tempo were statistically signifi
 ```{r, message=FALSE, warning=FALSE}
 m2<- lm(W ~ ADJOE + ADJDE + TOR + TORD + ORB + DRB + ADJ_T, data=cbb)
 summary(m2)
+tab_model(m2)
+
 
 m3<- lm(W ~ ADJOE + ADJDE + TOR + TORD + ORB + DRB + ADJ_T, data=tourney)
 summary(m3)
+tab_model(m3)
 ```
 In the full season sample, Offensive Efficiency, Defensive Efficiency, Turnover Rate, Steal Rate, Offensive Rebound Rate, and Offensive Rebound Rate Allowed were all statistically significantly predictors of total wins. 
 
