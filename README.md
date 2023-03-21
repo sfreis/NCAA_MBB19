@@ -20,3 +20,4 @@ library(performance)
 Report here: https://sfreis.github.io/NCAA_MBB19/
 
 ![bballcor](https://user-images.githubusercontent.com/54371512/226495779-dfc0efd1-6b20-4b78-be1e-7e0869a35ecd.png)
+![bballscatter](https://user-images.githubusercontent.com/54371512/226496613-0fdfd627-d52e-49b5-860e-33aa95cf459b.png)
